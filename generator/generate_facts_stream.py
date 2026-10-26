@@ -121,6 +121,7 @@ def gen_transfer(ticket_id, event_dt):
         2,
     )
     return {
+        "transfer_id": f"TR{uuid.uuid4().hex[:10]}",
         "ticket_id": ticket_id,
         "from_team": from_team,
         "to_team": to_team,
@@ -171,49 +172,51 @@ def write_legacy_created(rows, path):
             epoch_ms = int(
                 t["created_at"].replace(tzinfo=timezone.utc).timestamp() * 1000
             )
-            w.writerow(
-                {
-                    "ticketId": t["ticket_id"],
-                    "custId": t["customer_id"],
-                    "prodId": t["product_id"],
-                    "issueType": t["ticket_category"],
-                    "assignedAgent": t["agent_id"] if random.random() > 0.08 else "",
-                    "prio": t["priority"].upper(),
-                    "created_epoch_ms": epoch_ms,
-                    "sla_hrs": t["sla_target_hours"],
-                }
-            )
+            final_row = {
+                "ticketId": t["ticket_id"],
+                "custId": t["customer_id"],
+                "prodId": t["product_id"],
+                "issueType": t["ticket_category"],
+                "assignedAgent": t["agent_id"] if random.random() > 0.08 else "",
+                "prio": t["priority"].upper(),
+                "created_epoch_ms": epoch_ms,
+                "sla_hrs": t["sla_target_hours"],
+            }
+            w.writerow(final_row)
             if random.random() < 0.02:  # ~2% duplicate re-export, same values
-                w.writerow(
-                    {
-                        "ticketId": t["ticket_id"],
-                        "custId": t["customer_id"],
-                        "prodId": t["product_id"],
-                        "issueType": t["ticket_category"],
-                        "assignedAgent": (
-                            t["agent_id"] if random.random() > 0.08 else ""
-                        ),
-                        "prio": t["priority"].upper(),
-                        "created_epoch_ms": epoch_ms,
-                        "sla_hrs": t["sla_target_hours"],
-                    }
-                )
+                w.writerow(final_row)
 
 
 def write_resolved_events(rows, path, source):
+    if source == "zendesk_export":
+        _write_zendesk_resolved(rows, path)
+    else:
+        _write_legacy_resolved(rows, path)
+
+
+def _write_zendesk_resolved(rows, path):
+    """JSON lines, ISO timestamps — matches write_zendesk_created's format."""
     with open(path, "w") as f:
         for r in rows:
-            if source == "zendesk_export":
-                rec = {
-                    "ticket_id": r["ticket_id"],
-                    "resolved_at": r["resolved_at"].isoformat(),
-                    "resolution_duration_hours": r["resolution_duration_hours"],
-                    "sla_breached": r["sla_breached"],
-                    "csat": r["csat"],
-                    "_source": source,
-                }
-            else:
-                rec = {
+            rec = {
+                "ticket_id": r["ticket_id"],
+                "resolved_at": r["resolved_at"].isoformat(),
+                "resolution_duration_hours": r["resolution_duration_hours"],
+                "sla_breached": r["sla_breached"],
+                "csat": r["csat"],
+                "_source": "zendesk_export",
+            }
+            f.write(json.dumps(rec) + "\n")
+
+
+def _write_legacy_resolved(rows, path):
+    fieldnames = ["ticketId", "resolved_epoch_ms", "duration_hrs", "breached", "csat"]
+    with open(path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fieldnames)
+        w.writeheader()
+        for r in rows:
+            w.writerow(
+                {
                     "ticketId": r["ticket_id"],
                     "resolved_epoch_ms": int(
                         r["resolved_at"].replace(tzinfo=timezone.utc).timestamp() * 1000
@@ -222,8 +225,7 @@ def write_resolved_events(rows, path, source):
                     "breached": int(r["sla_breached"]),
                     "csat": r["csat"] if r["csat"] else "",
                 }
-            f.write(json.dumps(rec) + "\n")
-
+            )
 
 def write_transfers(rows, path):
     with open(path, "w") as f:
@@ -274,7 +276,7 @@ def main():
 
     bf = sub.add_parser("backfill")
     bf.add_argument("--landing", default="./data/landing")
-    bf.add_argument("--dim-dir", default="./data/dimensions")
+    bf.add_argument("--dim-dir", default="./data/entities")
     bf.add_argument("--days", type=int, default=45)
     bf.add_argument("--tickets-per-day", type=int, default=250)
     bf.add_argument(
@@ -283,7 +285,7 @@ def main():
 
     live = sub.add_parser("live")
     live.add_argument("--landing", default="./data/landing")
-    live.add_argument("--dim-dir", default="./data/dimensions")
+    live.add_argument("--dim-dir", default="./data/entities")
     live.add_argument(
         "--interval", type=int, default=10, help="seconds between batches"
     )
@@ -332,7 +334,7 @@ def main():
             if resolved[split:]:
                 write_resolved_events(
                     resolved[split:],
-                    f"{ldir}/part-{uuid.uuid4().hex[:8]}.jsonl",
+                    f"{ldir}/part-{uuid.uuid4().hex[:8]}.csv",
                     "legacy_crm",
                 )
 

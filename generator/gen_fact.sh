@@ -8,7 +8,7 @@ MODE="${1:-}"
 case "$MODE" in
     backfill)
         python generate_facts_stream.py backfill \
-            --dim-dir ../data/dimensions \
+            --dim-dir ../data/entities \
             --landing ../data/landing \
             --days 1000 --tickets-per-day 10
         aws s3 sync ../data s3://support-ops-lakehouse-data --profile s3-uploader
@@ -20,7 +20,7 @@ case "$MODE" in
         echo "Generator started. Starting continuous S3 sync..."
 
         python generate_facts_stream.py live \
-            --dim-dir ../data/dimensions \
+            --dim-dir ../data/entities \
             --landing ../data/landing \
             --interval 10 --batch-size 10 --iterations 30 &
         

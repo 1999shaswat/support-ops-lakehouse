@@ -1,7 +1,7 @@
 """
 Generates dim_* tables as CSVs.
 Usage:
-    python generate_dimensions.py --outdir ./data/dimensions
+    python generate_dimensions.py --outdir ./data/entities
 """
 import argparse
 import csv
@@ -27,7 +27,7 @@ REGIONS = [
 ]
 
 def write_dim_region(outdir):
-    path = f"{outdir}/dim_region.csv"
+    path = f"{outdir}/regions.csv"
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["region_id", "region_name", "country", "timezone", "utc_offset"])
@@ -76,7 +76,7 @@ CONTACT_RANGES = {
 }
 
 def write_dim_product(outdir):
-    path = f"{outdir}/dim_product.csv"
+    path = f"{outdir}/products.csv"
     rows = []
     pid = 1
     for cat, products in CATEGORIES.items():
@@ -122,7 +122,7 @@ def build_companies(n_companies, region_ids):
     return companies
 
 def write_dim_company(outdir, companies):
-    path = f"{outdir}/dim_company.csv"
+    path = f"{outdir}/companies.csv"
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["company_id", "company_name", "domain", "customer_segment", "region_id"])
@@ -132,7 +132,7 @@ def write_dim_company(outdir, companies):
 
 def write_dim_customer(outdir, companies):
     customer_ids = []
-    path = f"{outdir}/dim_customer.csv"
+    path = f"{outdir}/customers.csv"
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["customer_id", "contact_name", "email", "company_id"])
@@ -170,7 +170,7 @@ def agent_email(name):
     return f"{first}.{last}@{COMPANY_DOMAIN}"
 
 def write_dim_agent(outdir, region_ids):
-    path = f"{outdir}/dim_agent.csv"
+    path = f"{outdir}/agents.csv"
     rows = []
     aid = 1
     for team, count in TEAMS.items():
@@ -196,7 +196,7 @@ def write_dim_agent(outdir, region_ids):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--outdir", default="./data/dimensions")
+    ap.add_argument("--outdir", default="./data/entities")
     ap.add_argument("--n-companies", type=int, default=25)
     args = ap.parse_args()
 
@@ -204,7 +204,7 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
     write_dim_region(args.outdir)
-    write_dim_date(args.outdir)
+    # write_dim_date(args.outdir)
     _, product_ids, product_categories = write_dim_product(args.outdir)
     region_ids = [r[0] for r in REGIONS]
     companies = build_companies(args.n_companies, region_ids)
